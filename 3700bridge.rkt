@@ -104,6 +104,7 @@
            (filter (λ (x) (< (- current (cddr x)) 5000)) (hash->list fft)))))
 
 (define (main)
+  (println "hi")
   (define-values (bridge-id lans) (parse-args (current-command-line-arguments)))
   (set! lans (lans->ports lans))
   (define-values (root-id root-port cost-to-root designated-bridge)
