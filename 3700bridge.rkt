@@ -27,7 +27,7 @@
   (foldl (λ (x y) (begin (set! i (add1 i))
                          (hash-set y i x)))
          (hash)
-         (map (λ (x) (call-with-values (λ () (unix-socket-connect (pad x))) cons)) lans)))
+         (map (λ (x) (call-with-values (λ () (unix-socket-connect x)) cons)) lans)))
        
 
 ;; Broadcasts a bpdu to all given ports
