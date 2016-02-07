@@ -114,6 +114,7 @@
   (printf "Bridge ~a starting up\n" bridge-id)
   (letrec ([loop
          (λ ()
+           (flush-output)
            (unless (< (now most-recent-bpdu) 500)
                (begin (set! most-recent-bpdu (current-milliseconds))
                       (bpdu bridge-id root-id cost-to-root lans)))
