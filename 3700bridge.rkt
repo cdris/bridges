@@ -35,7 +35,8 @@
 (define (bpdu bridge-id root-id cost-to-root lans)
   (for ([lan (hash-values lans)])
     (broadcast bridge-id "ffff" "bpdu"
-               (jsexpr->string (hash 'id bridge-id 'root root-id 'cost cost-to-root))
+               (jsexpr->string (hash 'id (symbol->string bridge-id)
+                                     'root (symbol->string root-id) 'cost cost-to-root))
                (cadr lan))))
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
