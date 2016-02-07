@@ -126,7 +126,7 @@
                                                     designated-bridge (car lan) message lans))]
                          [(string=? type "data")
                           (when (member (car lan) open-lan-ids)
-                            (begin (update-fft source (car lan))
+                            (begin (update-fft fft source (car lan))
                                    (handle-data source destination type message (car lan)
                                                 fft open-lan-ids lans)))]
                          [else (error 'invalid-message-type)]))))
