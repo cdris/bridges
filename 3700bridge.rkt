@@ -34,7 +34,7 @@
 ;; Broadcasts a bpdu to all given ports
 (define (bpdu bridge-id root-id cost-to-root lans)
   (for ([lan (hash-values lans)])
-    (broadcast bridge-id "ffff" "bpdu"
+    (broadcast bridge-id 'ffff "bpdu"
                (jsexpr->string (hash 'id (symbol->string bridge-id)
                                      'root (symbol->string root-id) 'cost cost-to-root))
                (cdr lan))))
@@ -49,22 +49,22 @@
 (define (read-message port)
   (let ([jsexpr (read-json port)])
     (if (eof-object? jsexpr) (values #f #f #f #f)
-        (values (hash-ref jsexpr 'source)
-                (hash-ref jsexpr 'dest)
+        (values (string->symbol (hash-ref jsexpr 'source))
+                (string->symbol (hash-ref jsexpr 'dest))
                 (hash-ref jsexpr 'type)
                 (hash-ref jsexpr 'message))))) 
 
 ;; Handles a bpdu message
 (define (handle-bpdu bridge-id root-id root-port cost-to-root des-bridge msg-port message lans)
-  (let*-values ([(msg-bridge-id msg-root-id msg-cost) (values (hash-ref message 'id)
-                                                              (hash-ref message 'root)
+  (let*-values ([(msg-bridge-id msg-root-id msg-cost) (values (string->symbol (hash-ref message 'id))
+                                                              (string->symbol (hash-ref message 'root))
                                                               (hash-ref message 'cost))]
                 [(msg-cost+1) (add1 msg-cost)])
     (if (or (< msg-root-id root-id)
-            (and (not (or (> msg-root-id root-id) (> msg-cost+1 cost-to-root)))
+            (and (not (or (symbol<? root-id msg-root-id) (> msg-cost+1 cost-to-root)))
                  (or (< msg-cost+1 cost-to-root)
-                     (< msg-bridge-id des-bridge))))
-        (begin (unless (= root-id msg-root-id)
+                     (symbol<? msg-bridge-id des-bridge))))
+        (begin (unless (symbol=? root-id msg-root-id)
                  (printf "New root: ~a/~a\n" bridge-id msg-root-id))
                (unless (= root-port msg-port)
                  (printf "Root port: ~a/~a\n" bridge-id msg-port))
