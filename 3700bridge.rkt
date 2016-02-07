@@ -40,7 +40,7 @@
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
 (define (broadcast source destination type message port)
-  (write-json (hash 'source source 'destination destination
+  (write-json (hash 'source source 'dest destination
                     'type type 'message message)
               port))
 
