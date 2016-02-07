@@ -17,9 +17,10 @@
   (let* ([chars (cons #\nul (string->list lan))]
          [len (length chars)])
     (if (< len 108)
-        (list->string (append chars(build-list (- 108 len)
-                                               (λ (x) #\nul))))
-        (list->string chars))))
+        (list->bytes (map char->integer
+                          (append chars(build-list (- 108 len)
+                                                   (λ (x) #\nul)))))
+        (list->bytes (map char->integer chars)))))
 
 ;; Returns a list of input an output ports to all given lans
 (define (lans->ports lans)
