@@ -40,7 +40,7 @@
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
 (define (broadcast source destination type message port)
-  (write-json (hash 'source source 'destination destination
+  (write-json (hash 'source source 'dest destination
                     'type type 'message message)
               port))
 
@@ -49,7 +49,7 @@
   (let ([jsexpr (read-json port)])
     (if (eof-object? jsexpr) (values #f #f #f #f)
         (values (hash-ref jsexpr 'source)
-                (hash-ref jsexpr 'destination)
+                (hash-ref jsexpr 'dest)
                 (hash-ref jsexpr 'type)
                 (hash-ref jsexpr 'message))))) 
 
