@@ -22,7 +22,7 @@
                                                    (λ (x) #\nul)))))
         (list->bytes (map char->integer chars)))))
 
-;; Returns a list of input an output ports to all given lans
+;; Returns a list of input and output ports to all given lans
 (define (lans->ports lans)
   (define i -1)
   (foldl (λ (x y) (begin (set! i (add1 i))
@@ -49,7 +49,7 @@
   (let ([jsexpr (read-json port)])
     (if (eof-object? jsexpr) (values #f #f #f #f)
         (values (hash-ref jsexpr 'source)
-                (hash-ref jsexpr 'destination)
+                (hash-ref jsexpr 'dest)
                 (hash-ref jsexpr 'type)
                 (hash-ref jsexpr 'message))))) 
 
@@ -68,7 +68,7 @@
                (unless (= root-port msg-port)
                  (printf "Root port: ~a/~a\n" bridge-id msg-port))
           (bpdu bridge-id msg-root-id msg-cost+1 lans)
-               (values msg-root-id msg-port msg-cost+1 msg-bridge-id))
+          (values msg-root-id msg-port msg-cost+1 msg-bridge-id))
         (values root-id root-port cost-to-root des-bridge))))
 
 ;; Handles a data message
