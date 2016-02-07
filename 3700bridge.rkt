@@ -35,7 +35,7 @@
   (for ([lan (hash-values lans)])
     (broadcast bridge-id "ffff" "bpdu"
                (jsexpr->string (hash 'id bridge-id 'root root-id 'cost cost-to-root))
-               (second lan))))
+               (cadr lan))))
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
 (define (broadcast source destination type message port)
@@ -75,21 +75,21 @@
   (let ([port-age (hash-ref fft destination (λ () #f))]
         [msg-id (hash-ref message 'id)])
           ; we got the message on the port we'd send it out on
-    (cond [(and port-age (= (first port-age) msg-port))
+    (cond [(and port-age (= (car port-age) msg-port))
            (begin (printf "Not forwarding message ~a\n" msg-id)
                   fft)]
           ; we got the message and we'd send it out on an open port
-          [(and port-age (member (first port-age) open-lan-ids))
-           (begin (printf "Forwarding message ~a to port ~a\n" msg-id (first port-age))
+          [(and port-age (member (car port-age) open-lan-ids))
+           (begin (printf "Forwarding message ~a to port ~a\n" msg-id (car port-age))
                   (broadcast source destination type message
-                             (second (hash-ref lans (first port-age)))))]
+                             (cadr (hash-ref lans (car port-age)))))]
           ; otherwise broadcast to everyone
           [else
            (begin (printf "Broadcasting message ~a to all ports\n" msg-id)
                   (for ([open-port open-lan-ids]
                         #:unless (= open-port msg-port))
                     (broadcast source destination type message
-                               (second (hash-ref lans open-port)))))])))
+                               (cadr (hash-ref lans open-port)))))])))
 
 ;; Updates the FFT with new information about the incoming message
 (define (update-fft fft source msg-port)
@@ -117,12 +117,12 @@
                       (bpdu bridge-id root-id cost-to-root lans)))
            (set! fft (scrub-fft fft))
            (for ([lan (hash->list lans)])
-             (let-values ([(source destination type message) (read-message (second lan))])
+             (let-values ([(source destination type message) (read-message (cadr lan))])
                (when (or source destination type message)
                    (cond [(string=? type "bpdu")
                           (set!-values (root-id root-port cost-to-root designated-bridge)
                                        (handle-bpdu bridge-id root-id root-port cost-to-root
-                                                    designated-bridge (first lan) message lans))]
+                                                    designated-bridge (car lan) message lans))]
                          [(string=? type "data")
                           (when (member (car lan) open-lan-ids)
                             (begin (update-fft source (car lan))
