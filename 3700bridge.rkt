@@ -37,7 +37,7 @@
     (broadcast bridge-id "ffff" "bpdu"
                (jsexpr->string (hash 'id (symbol->string bridge-id)
                                      'root (symbol->string root-id) 'cost cost-to-root))
-               (cadr lan))))
+               (cdr lan))))
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
 (define (broadcast source destination type message port)
@@ -84,14 +84,14 @@
           [(and port-age (member (car port-age) open-lan-ids))
            (begin (printf "Forwarding message ~a to port ~a\n" msg-id (car port-age))
                   (broadcast source destination type message
-                             (cadr (hash-ref lans (car port-age)))))]
+                             (cdr (hash-ref lans (car port-age)))))]
           ; otherwise broadcast to everyone
           [else
            (begin (printf "Broadcasting message ~a to all ports\n" msg-id)
                   (for ([open-port open-lan-ids]
                         #:unless (= open-port msg-port))
                     (broadcast source destination type message
-                               (cadr (hash-ref lans open-port)))))])))
+                               (cdr (hash-ref lans open-port)))))])))
 
 ;; Updates the FFT with new information about the incoming message
 (define (update-fft fft source msg-port)
