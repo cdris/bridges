@@ -94,7 +94,7 @@
 
 ;; Updates the FFT with new information about the incoming message
 (define (update-fft fft source msg-port)
-  (hash-set source (cons msg-port (current-milliseconds))))
+  (hash-set fft source (cons msg-port (current-milliseconds))))
                     
 ;; Filters timed-out entries out of the fft
 (define (scrub-fft fft)
