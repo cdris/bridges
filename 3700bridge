@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
         ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
 
-        # Reads from each fo the ready sockets
+        # Reads from each of the ready sockets
         for key in ports.keys():
             port = ports[key]
             if port in ready:
