@@ -5,6 +5,7 @@ import socket
 import select
 import json
 import time
+import random
 
 
 class Bridge:
@@ -15,6 +16,15 @@ class Bridge:
         self.cost = 0
         self.desBridge = id
 
+class Port:
+    def __init__(self, socket):
+        self.port = socket
+        self.bpdu = None # Source-id, root-id, cost
+        self.flag = True
+        self.timeout = 0
+
+    def fileno(self):
+        return self.port.fileno()
 
 def current_milliseconds():
     return int(round(time.time() * 1000))
@@ -31,8 +41,8 @@ def pad(name):
 def bpdu(bridge, ports):
     for key, value in ports.items():
         broadcast(bridge.id, 'ffff', 'bpdu',
-                  {'id': bridge.id, 'root': bridge.root, 'cost': bridge.cost},
-                  value)
+                  {'id': random.randrange(100000), 'root': bridge.root, 'cost': bridge.cost},
+                  value.port)
 
 
 def broadcast(source, destination, type, message, port):
@@ -43,47 +53,63 @@ def broadcast(source, destination, type, message, port):
 
 
 def read_message(port):
-    return json.JSONDecoder().decode(port.recv(1500).decode())
+    return json.JSONDecoder().decode(port.port.recv(1500).decode())
 
 
 def handle_bpdu(bridge, msgPort, message, ports):
-    msgBridge = message['id']
+    msgBridge = message['source']
     msgRoot = message['root']
     msgCost = message['cost'] + 1
     if (msgRoot < bridge.root) or \
             (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
                      ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
         if bridge.root != msgRoot:
-            print('New root: %d/%d' % (bridge.id, msgRoot))
+            print('New root: %s/%s' % (bridge.id, msgRoot))
         if bridge.rootPort != msgPort:
-            print('Root port: %d/%d' % (bridge.id, msgPort))
+            print('Root port: %s/%d' % (bridge.id, msgPort))
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
         bridge.desBridge = msgBridge
         bpdu(bridge, ports)
+    for key in ports.keys():
+        port = ports[key]
+        if (not port.bpdu is None) and (not (key == msgPort)) and port.flag:
+            bpdu = port.bpdu
+            if bpdu['root'] == msgRoot and bpdu['cost'] == msgCost - 1 and \
+                bpdu['source'] != msgBridge:
+                p = key
+                if bpdu['source'] >= msgBridge:
+                    port.flag = False
+                else:
+                    p = msgPort
+                    ports[msgPort].flag = False
+                    print('Disabled port: %s/%d' % (bridge.id, p))
+            elif bpdu['id'] == message['id']:
+                ports[msgPort].flag = False
+                print('Disabled port: %s/%d' % (bridge.id, msgPort))
 
 
-def handle_data(source, destination, type, message, msgPort, fft, openPorts, ports):
+def handle_data(source, destination, type, message, msgPort, fft, ports):
     msgID = message['id']
     print('Received message %d on port %d from %s to %s' % (msgID, msgPort, source, destination))
     try:
         portInfo = fft[destination]
         if portInfo[0] == msgPort:
             print('Not forwarding message %d' % msgID)
-        elif portInfo[0] in openPorts:
+        elif ports[portInfo[0]].flag:
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
-            broadcast(source, destination, type, message, ports[portInfo[0]])
+            broadcast(source, destination, type, message, ports[portInfo[0]].port)
         else:
             print('Broadcasting message %d to all ports' % msgID)
             for port in openPorts:
                 if port != msgPort:
-                    broadcast(source, destination, type, message, ports[port])
+                    broadcast(source, destination, type, message, ports[port].port)
     except KeyError:
         print('Broadcasting message %d to all ports' % msgID)
-        for port in openPorts:
-            if port != msgPort:
-                broadcast(source, destination, type, message, ports[port])
+        for key in ports.keys():
+            if key != msgPort and ports[key].flag:
+                broadcast(source, destination, type, message, ports[key].port)
 
 
 def update_fft(fft, source, msgPort):
@@ -101,7 +127,6 @@ if __name__ == "__main__":
     LAN = sys.argv[2:]
     bridge = Bridge(sys.argv[1])
     ports = {}
-    openPorts = []
     lastBPDU = 0
     fft = {}
 
@@ -109,9 +134,8 @@ if __name__ == "__main__":
     for x in range(len(LAN)):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         s.connect(pad(LAN[x]))
-        ports[x] = s
-        openPorts.append(x)
-
+        ports[x] = Port(s)
+    
     print("Bridge %s starting up" % bridge.id)
 
     # Main loop
@@ -125,8 +149,9 @@ if __name__ == "__main__":
 
         # Reads from each fo the ready sockets
         for key in ports.keys():
-            if ports[key] in ready:
-                msg = read_message(ports[key])
+            port = ports[key]
+            if port in ready:
+                msg = read_message(port)
                 if msg:
                     source = msg['source']
                     destination = msg['dest']
@@ -134,11 +159,12 @@ if __name__ == "__main__":
                     message = msg['message']
 
                     if type == 'bpdu':
-                        handle_bpdu(bridge, key,
-                                    message, ports)
+                        message['source'] = source
+                        port.bpdu = message
+                        handle_bpdu(bridge, key, message, ports)
                     elif type == 'data':
-                        if key in openPorts:
+                        if port.flag:
                             update_fft(fft, source, key)
-                        handle_data(source, destination,
-                                    type, message, key,
-                                    fft, openPorts, ports)
+                            handle_data(source, destination,
+                                        type, message, key,
+                                        fft, ports)
