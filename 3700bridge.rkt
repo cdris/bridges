@@ -62,6 +62,7 @@
                                                               (string->symbol (hash-ref message 'root))
                                                               (hash-ref message 'cost))]
                 [(msg-cost+1) (add1 msg-cost)])
+    (printf "Received bpdu\n")
     (if (or (< msg-root-id root-id)
             (and (not (or (symbol<? root-id msg-root-id) (> msg-cost+1 cost-to-root)))
                  (or (< msg-cost+1 cost-to-root)
@@ -120,6 +121,7 @@
          (λ ()
            (unless (< (now most-recent-bpdu) 500)
                (begin (set! most-recent-bpdu (current-milliseconds))
+                      (printf "Sent bpdu\n")
                       (bpdu bridge-id root-id cost-to-root lans)))
            (set! fft (scrub-fft fft))
            (for ([lan (hash->list lans)])
