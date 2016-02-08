@@ -75,17 +75,17 @@ def handle_bpdu(bridge, msgPort, message, ports):
     for key in ports.keys():
         port = ports[key]
         if (not port.bpdu is None) and (not (key == msgPort)) and port.flag:
-            bpdu = port.bpdu
-            if bpdu['root'] == msgRoot and bpdu['cost'] == msgCost - 1 and \
-                bpdu['source'] != msgBridge:
+            port_bpdu = port.bpdu
+            if ['root'] == msgRoot and port_bpdu['cost'] == msgCost - 1 and \
+                port_bpdu['source'] != msgBridge:
                 p = key
-                if bpdu['source'] >= msgBridge:
+                if port_bpdu['source'] >= msgBridge:
                     port.flag = False
                 else:
                     p = msgPort
                     ports[msgPort].flag = False
                     print('Disabled port: %s/%d' % (bridge.id, p))
-            elif bpdu['id'] == message['id']:
+            elif port_bpdu['id'] == message['id']:
                 ports[msgPort].flag = False
                 print('Disabled port: %s/%d' % (bridge.id, msgPort))
 
