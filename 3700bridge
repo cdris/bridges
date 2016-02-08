@@ -41,7 +41,7 @@ def pad(name):
 def bpdu(bridge, ports):
     for key, value in ports.items():
         broadcast(bridge.id, 'ffff', 'bpdu',
-                  {'id': random.randrange(100000), 'root': bridge.root, 'cost': bridge.cost},
+                  {'id': key, 'root': bridge.root, 'cost': bridge.cost},
                   value.port)
 
 
@@ -85,7 +85,7 @@ def handle_bpdu(bridge, msgPort, message, ports):
                     p = msgPort
                     ports[msgPort].flag = False
                     print('Disabled port: %s/%d' % (bridge.id, p))
-            elif port_bpdu['id'] == message['id']:
+            elif port_bpdu['id'] == msgPort:
                 ports[msgPort].flag = False
                 print('Disabled port: %s/%d' % (bridge.id, msgPort))
 
@@ -118,10 +118,11 @@ def update_fft(fft, source, msgPort):
 
 def scrub_fft(fft):
     t = current_milliseconds()
-    for key in fft.keys():
-        if t - fft[key][1] >= 5000:
-            del fft[key]
-
+    newFFT = {}
+    for key, value in fft.items():
+        if t - fft[key][1] < 5000:
+            newFFT[key] = value
+    return newFFT
 
 if __name__ == "__main__":
     LAN = sys.argv[2:]
@@ -143,7 +144,7 @@ if __name__ == "__main__":
         if current_milliseconds() - lastBPDU >= 500:
             lastBPDU = current_milliseconds()
             bpdu(bridge, ports)
-        scrub_fft(fft)
+        fft = scrub_fft(fft)
 
         ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
 
