@@ -76,6 +76,8 @@
 (define (handle-data source destination type message msg-port fft open-lan-ids lans)
   (let ([port-age (hash-ref fft destination (λ () #f))]
         [msg-id (hash-ref message 'id)])
+    (printf "Received message ~a on port ~a from ~a to ~a\n"
+            msg-id msg-port source destination)
           ; we got the message on the port we'd send it out on
     (cond [(and port-age (= (car port-age) msg-port))
            (begin (printf "Not forwarding message ~a\n" msg-id)
