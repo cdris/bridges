@@ -133,13 +133,11 @@ if __name__ == "__main__":
                     source = msg['source']
                     destination = msg['dest']
                     type = msg['type']
-                    message = msg['message']
+                    message = json.JSONDecoder().decode(msg['message'])
 
                     if type == 'bpdu':
-                        treeData = handleBPDU(bridgeID, rootID,
-                                              rootPort, cost,
-                                              desBridge, key,
-                                              message, ports)
+                        handle_bpdu(bridge, key,
+                                    message, ports)
                     elif type == 'data':
                         if key in openPorts:
                             update_fft(fft, source, key)
