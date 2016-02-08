@@ -31,14 +31,11 @@ def pad(name):
 def bpdu(bridge, ports):
     for key, value in ports.items():
         broadcast(bridge.id, 'ffff', 'bpdu',
-                  json.JSONEncoder().encode({'id': bridge.id,
-                                             'root': bridge.root,
-                                             'cost': bridge.cost}),
+                  {'id': bridge.id, 'root': bridge.root, 'cost': bridge.cost},
                   value)
 
 
 def broadcast(source, destination, type, message, port):
-    print('broadcasting: ' + type)
     port.send(json.JSONEncoder().encode({'source': source,
                                          'dest': destination,
                                          'type': type,
@@ -76,6 +73,7 @@ def handle_data(source, destination, type, message, msgPort, fft, openPorts, por
             print('Not forwarding message %d' % msgID)
         elif portInfo[0] in openPorts:
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
+            broadcast(source, destination, type, message, ports[portInfo[0]])
         else:
             print('Broadcasting message %d to all ports' % msgID)
             for port in openPorts:
@@ -133,7 +131,7 @@ if __name__ == "__main__":
                     source = msg['source']
                     destination = msg['dest']
                     type = msg['type']
-                    message = json.JSONDecoder().decode(msg['message'])
+                    message = msg['message']
 
                     if type == 'bpdu':
                         handle_bpdu(bridge, key,
