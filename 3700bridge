@@ -85,10 +85,10 @@ def handle_bpdu(bridge, msgPort, message, ports):
                     p = msgPort
                     ports[msgPort].flag = False
                     print('Disabled port: %s/%d' % (bridge.id, p))
-            elif port_bpdu['id'] == msgPort:
+            elif (port_bpdu['source'] == bridge.id and port_bpdu['id'] == msgPort) \
+                  or (port_bpdu['source'] == msgBridge and msgBridge < bridge.id):
                 ports[msgPort].flag = False
                 print('Disabled port: %s/%d' % (bridge.id, msgPort))
-
 
 def handle_data(source, destination, type, message, msgPort, fft, ports):
     msgID = message['id']
