@@ -133,7 +133,7 @@ if __name__ == "__main__":
                     source = msg['source']
                     destination = msg['dest']
                     type = msg['type']
-                    message = json.JSONDecoder().decode(msg['message'])
+                    message = msg['message']
 
                     if type == 'bpdu':
                         handle_bpdu(bridge, key,
