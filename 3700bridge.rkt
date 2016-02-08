@@ -41,9 +41,10 @@
 
 ;; Broadcasts a message to the given port, formatted as a JSON message
 (define (broadcast source destination type message port)
-  (write-json (hash 'source (symbol->string source) 'dest (symbol->string destination)
-                    'type type 'message message)
-              port))
+  (let ([h (hash 'source (symbol->string source) 'dest (symbol->string destination)
+                 'type type 'message message)])
+    (printf "~a\n" (jsexpr->string h))
+    (write-json h port)))
 
 ;; Parses an incoming message from a port
 (define (read-message port)
