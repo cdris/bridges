@@ -61,6 +61,7 @@
                                                               (hash-ref message 'cost))]
                 [(msg-cost+1) (add1 msg-cost)])
     (printf "Received bpdu\n")
+    (flush-output)
     (if (or (< msg-root-id root-id)
             (and (not (or (symbol<? root-id msg-root-id) (> msg-cost+1 cost-to-root)))
                  (or (< msg-cost+1 cost-to-root)
