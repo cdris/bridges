@@ -48,6 +48,8 @@
 ;; Parses an incoming message from a port
 (define (read-message port)
   (let ([jsexpr (read-json port)])
+    (printf "Received this message: ~a\n" (jsexpr->string jsexpr))
+    (flush-output)
     (if (eof-object? jsexpr) (values #f #f #f #f)
         (values (string->symbol (hash-ref jsexpr 'source))
                 (string->symbol (hash-ref jsexpr 'dest))
