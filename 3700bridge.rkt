@@ -112,7 +112,7 @@
   (define-values (root-id root-port cost-to-root designated-bridge)
     (values bridge-id -1 0 bridge-id))
   (define-values (most-recent-bpdu fft open-lan-ids)
-    (values (current-milliseconds) (hash) (hash-keys lans)))
+    (values 0 (hash) (hash-keys lans)))
   ; fft : address, port id, age
   (printf "Bridge ~a starting up\n" bridge-id)
   (letrec ([loop
