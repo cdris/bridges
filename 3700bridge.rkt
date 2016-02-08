@@ -61,6 +61,7 @@
                                                               (hash-ref message 'cost))]
                 [(msg-cost+1) (add1 msg-cost)])
     (printf "Received bpdu\n")
+    (flush-output)
     (if (or (< msg-root-id root-id)
             (and (not (or (symbol<? root-id msg-root-id) (> msg-cost+1 cost-to-root)))
                  (or (< msg-cost+1 cost-to-root)
@@ -112,7 +113,7 @@
   (define-values (root-id root-port cost-to-root designated-bridge)
     (values bridge-id -1 0 bridge-id))
   (define-values (most-recent-bpdu fft open-lan-ids)
-    (values (current-milliseconds) (hash) (hash-keys lans)))
+    (values 0 (hash) (hash-keys lans)))
   ; fft : address, port id, age
   (printf "Bridge ~a starting up\n" bridge-id)
   (letrec ([loop
