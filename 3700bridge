@@ -33,10 +33,10 @@ def bpdu(bridge, ports):
 			  value)
 
 def broadcast(source, destination, type, message, port):
-	port.send(json.JSONEncoder().encode('source': source,
+	port.send(json.JSONEncoder().encode({'source': source,
 					    'destination': destination,
 				  	    'type': type,
-				  	    'message': message))
+				  	    'message': message}))
 
 def read_message(port):
 	try:
@@ -49,12 +49,12 @@ def handle_bpdu(bridge, msgPort, message, ports):
 	msgRoot = message['root']
 	msgCost = message['cost'] + 1
 	if (msgRoot < bridge.root) or \
-	   (!((> msgRoot bridge.root) or (msgCost > bridge.cost)) and \
+	   (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
 	   ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
 		if bridge.root != msgRoot:
 			print('New root: ' + bridge.id + '/' + msgRoot + '\n')
 		if bridge.rootPort != msgPort:
-			print('Root port: ' + bridge.id + '/' msgPort + '\n')
+			print('Root port: ' + bridge.id + '/' + msgPort + '\n')
 		bridge.root = msgRoot
 		bridge.rootPort = msgPort
 		bridge.cost = msgCost
@@ -80,7 +80,7 @@ def handle_data(source, destination, type, message, msgPort, fft,  openPorts, po
 			if port != msgPort:
 				broadcast(source, destination, type, message, ports[port])
 
-def update_fft(fft source msgPort):
+def update_fft(fft, source, msgPort):
 	fft[source] = [msgPort, current_milliseconds()]
 
 def scrub_fft(fft):
