@@ -38,17 +38,15 @@ def bpdu(bridge, ports):
 
 
 def broadcast(source, destination, type, message, port):
+    print('broadcasting: ' + type)
     port.send(json.JSONEncoder().encode({'source': source,
-                                         'destination': destination,
+                                         'dest': destination,
                                          'type': type,
-                                         'message': message}))
+                                         'message': message}).encode())
 
 
 def read_message(port):
-    try:
-        return json.JSONDecoder().decode(port.recv(1500))
-    except JSONDecodeError:
-        return False
+    return json.JSONDecoder().decode(port.recv(1500).decode())
 
 
 def handle_bpdu(bridge, msgPort, message, ports):
@@ -59,9 +57,9 @@ def handle_bpdu(bridge, msgPort, message, ports):
             (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
                      ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
         if bridge.root != msgRoot:
-            print('New root: ' + bridge.id + '/' + msgRoot + '\n')
+            print('New root: ' + bridge.id + '/' + msgRoot)
         if bridge.rootPort != msgPort:
-            print('Root port: ' + bridge.id + '/' + msgPort + '\n')
+            print('Root port: ' + bridge.id + '/' + msgPort)
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
@@ -71,19 +69,20 @@ def handle_bpdu(bridge, msgPort, message, ports):
 
 def handle_data(source, destination, type, message, msgPort, fft, openPorts, ports):
     msgID = message['id']
+    print('Received message %d on port %d from %s to %s' % (msgID, msgPort, source, destination))
     try:
         portInfo = fft[destination]
         if portInfo[0] == msgPort:
-            print('Not forwarding message ' + msgID + '\n')
+            print('Not forwarding message ' + msgID)
         elif portInfo[0] in openPorts:
-            print('Forwarding message ' + msgID + ' to port ' + portInfo[0] + '\n')
+            print('Forwarding message ' + msgID + ' to port ' + portInfo[0])
         else:
-            print('Broadcasting message ' + msgID + ' to all ports\n')
+            print('Broadcasting message ' + msgID + ' to all ports')
             for port in openPorts:
                 if port != msgPort:
                     broadcast(source, destination, type, message, ports[port])
     except KeyError:
-        print('Broadcasting message ' + msgID + ' to all ports\n')
+        print('Broadcasting message ' + msgID + ' to all ports')
         for port in openPorts:
             if port != msgPort:
                 broadcast(source, destination, type, message, ports[port])
@@ -112,11 +111,10 @@ if __name__ == "__main__":
     for x in range(len(LAN)):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         s.connect(pad(LAN[x]))
-        s.settimeout(1)
         ports[x] = s
         openPorts.append(x)
 
-    print("Bridge " + bridge.id + " starting up\n")
+    print("Bridge " + bridge.id + " starting up")
 
     # Main loop
     while True:
@@ -125,23 +123,26 @@ if __name__ == "__main__":
             bpdu(bridge, ports)
         scrub_fft(fft)
 
+        ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
+        
         # Reads from each fo the ready sockets
-        for key, value in ports:
-            msg = read_message(x)
-            if msg:
-                source = msg['source']
-                destination = msg['destination']
-                type = msg['type']
-                message = msg['message']
+        for key in ports.keys():
+            if ports[key] in ready:
+                msg = read_message(ports[key])
+                if msg:
+                    source = msg['source']
+                    destination = msg['dest']
+                    type = msg['type']
+                    message = msg['message']
 
-                if type == 'bpdu':
-                    treeData = handleBPDU(bridgeID, rootID,
-                                          rootPort, cost,
-                                          desBridge, key,
-                                          message, ports)
-                elif type == 'data':
-                    if key in openPorts:
-                        update_fft(fft, source, key)
-                    handle_data(source, destination,
-                                type, message, key,
-                                fft, openPorts, ports)
+                    if type == 'bpdu':
+                        treeData = handleBPDU(bridgeID, rootID,
+                                              rootPort, cost,
+                                              desBridge, key,
+                                              message, ports)
+                    elif type == 'data':
+                        if key in openPorts:
+                            update_fft(fft, source, key)
+                        handle_data(source, destination,
+                                    type, message, key,
+                                    fft, openPorts, ports)
