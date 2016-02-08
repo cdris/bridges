@@ -3,8 +3,6 @@
 (require json)
 (define start (current-milliseconds))
 
-(define (now start) (- (current-milliseconds) start))
-
 ;; Parses the commandline arguments into two values, the bridge id
 ;; and a list of the lan ids
 (define (parse-args vec)
@@ -119,9 +117,10 @@
   (printf "Bridge ~a starting up\n" bridge-id)
   (letrec ([loop
          (λ ()
-           (unless (< (now most-recent-bpdu) 500)
+           (unless (< (- (current-milliseconds) most-recent-bpdu) 500)
                (begin (set! most-recent-bpdu (current-milliseconds))
                       (printf "Sent bpdu\n")
+                      (flush-output)
                       (bpdu bridge-id root-id cost-to-root lans)))
            (set! fft (scrub-fft fft))
            (for ([lan (hash->list lans)])
