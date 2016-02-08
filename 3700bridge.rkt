@@ -43,7 +43,7 @@
                  'type type 'message message)])
     (printf "~a\n" (jsexpr->string h))
     (flush-output)
-    (write-json h port)))
+    (print (jsexpr->string h) port)))
 
 ;; Parses an incoming message from a port
 (define (read-message port)
