@@ -1,4 +1,4 @@
-#!/usr/bin/python3 -u    
+#!/usr/bin/python3 -u
 # The -u makes output unbuffered, so it will show up immediately
 import sys
 import socket
@@ -57,9 +57,9 @@ def handle_bpdu(bridge, msgPort, message, ports):
             (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
                      ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
         if bridge.root != msgRoot:
-            print('New root: ' + bridge.id + '/' + msgRoot)
+            print('New root: %d/%d' % (bridge.id, msgRoot))
         if bridge.rootPort != msgPort:
-            print('Root port: ' + bridge.id + '/' + msgPort)
+            print('Root port: %d/%d' % (bridge.id, msgPort))
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
@@ -73,16 +73,16 @@ def handle_data(source, destination, type, message, msgPort, fft, openPorts, por
     try:
         portInfo = fft[destination]
         if portInfo[0] == msgPort:
-            print('Not forwarding message ' + msgID)
+            print('Not forwarding message %d' % msgID)
         elif portInfo[0] in openPorts:
-            print('Forwarding message ' + msgID + ' to port ' + portInfo[0])
+            print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
         else:
-            print('Broadcasting message ' + msgID + ' to all ports')
+            print('Broadcasting message %d to all ports' % msgID)
             for port in openPorts:
                 if port != msgPort:
                     broadcast(source, destination, type, message, ports[port])
     except KeyError:
-        print('Broadcasting message ' + msgID + ' to all ports')
+        print('Broadcasting message %d to all ports' % msgID)
         for port in openPorts:
             if port != msgPort:
                 broadcast(source, destination, type, message, ports[port])
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         ports[x] = s
         openPorts.append(x)
 
-    print("Bridge " + bridge.id + " starting up")
+    print("Bridge %s starting up" % bridge.id)
 
     # Main loop
     while True:
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         scrub_fft(fft)
 
         ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
-        
+
         # Reads from each fo the ready sockets
         for key in ports.keys():
             if ports[key] in ready:
