@@ -6,131 +6,142 @@ import select
 import json
 import time
 
+
 class Bridge:
-	def __init__(self, id):
-		self.id = id
-		self.root = id
-		self.rootPort = -1
-		self.cost = 0
-		self.desBridge = id
+    def __init__(self, id):
+        self.id = id
+        self.root = id
+        self.rootPort = -1
+        self.cost = 0
+        self.desBridge = id
+
 
 def current_milliseconds():
-	return int(round(time.time() * 1000))
+    return int(round(time.time() * 1000))
+
 
 # pads the name with null bytes at the end
 def pad(name):
-        result = '\0' + name
-        while len(result) < 108:
-                result += '\0'
-        return result
+    result = '\0' + name
+    while len(result) < 108:
+        result += '\0'
+    return result
+
 
 def bpdu(bridge, ports):
-	for key, value in ports.items():
-		broadcast(bridge.id, 'ffff', 'bpdu', 
-			  json.JSONEncoder().encode({'id': bridge.id,
-			 			     'root': bridge.root,
-						     'cost': bridge.cost}),
-			  value)
+    for key, value in ports.items():
+        broadcast(bridge.id, 'ffff', 'bpdu',
+                  json.JSONEncoder().encode({'id': bridge.id,
+                                             'root': bridge.root,
+                                             'cost': bridge.cost}),
+                  value)
+
 
 def broadcast(source, destination, type, message, port):
-	port.send(json.JSONEncoder().encode({'source': source,
-					    'destination': destination,
-				  	    'type': type,
-				  	    'message': message}))
+    port.send(json.JSONEncoder().encode({'source': source,
+                                         'destination': destination,
+                                         'type': type,
+                                         'message': message}))
+
 
 def read_message(port):
-	try:
-		return  json.JSONDecoder().decode(port.recv(1500))
-	except JSONDecodeError:
-		return False
+    try:
+        return json.JSONDecoder().decode(port.recv(1500))
+    except JSONDecodeError:
+        return False
+
 
 def handle_bpdu(bridge, msgPort, message, ports):
-	msgBridge = message['id']
-	msgRoot = message['root']
-	msgCost = message['cost'] + 1
-	if (msgRoot < bridge.root) or \
-	   (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
-	   ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
-		if bridge.root != msgRoot:
-			print('New root: ' + bridge.id + '/' + msgRoot + '\n')
-		if bridge.rootPort != msgPort:
-			print('Root port: ' + bridge.id + '/' + msgPort + '\n')
-		bridge.root = msgRoot
-		bridge.rootPort = msgPort
-		bridge.cost = msgCost
-		bridge.desBridge = msgBridge
-		bpdu(bridge, ports)
+    msgBridge = message['id']
+    msgRoot = message['root']
+    msgCost = message['cost'] + 1
+    if (msgRoot < bridge.root) or \
+            (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
+                     ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
+        if bridge.root != msgRoot:
+            print('New root: ' + bridge.id + '/' + msgRoot + '\n')
+        if bridge.rootPort != msgPort:
+            print('Root port: ' + bridge.id + '/' + msgPort + '\n')
+        bridge.root = msgRoot
+        bridge.rootPort = msgPort
+        bridge.cost = msgCost
+        bridge.desBridge = msgBridge
+        bpdu(bridge, ports)
 
-def handle_data(source, destination, type, message, msgPort, fft,  openPorts, ports):
-	msgID = message['id']
-	try:
-		portInfo = fft[destination]
-		if portInfo[0] == msgPort:
-			print('Not forwarding message ' + msgID + '\n')
-		elif portInfo[0] in openPorts:
-			print('Forwarding message ' + msgID + ' to port ' + portInfo[0] + '\n')
-		else:
-			print ('Broadcasting message ' + msgID + ' to all ports\n')
-			for port in openPorts:
-				if port != msgPort:
-					broadcast(source, destination, type, message, ports[port])
-	except KeyError:
-		print('Broadcasting message ' + msgID + ' to all ports\n')
-		for port in openPorts:
-			if port != msgPort:
-				broadcast(source, destination, type, message, ports[port])
+
+def handle_data(source, destination, type, message, msgPort, fft, openPorts, ports):
+    msgID = message['id']
+    try:
+        portInfo = fft[destination]
+        if portInfo[0] == msgPort:
+            print('Not forwarding message ' + msgID + '\n')
+        elif portInfo[0] in openPorts:
+            print('Forwarding message ' + msgID + ' to port ' + portInfo[0] + '\n')
+        else:
+            print('Broadcasting message ' + msgID + ' to all ports\n')
+            for port in openPorts:
+                if port != msgPort:
+                    broadcast(source, destination, type, message, ports[port])
+    except KeyError:
+        print('Broadcasting message ' + msgID + ' to all ports\n')
+        for port in openPorts:
+            if port != msgPort:
+                broadcast(source, destination, type, message, ports[port])
+
 
 def update_fft(fft, source, msgPort):
-	fft[source] = [msgPort, current_milliseconds()]
+    fft[source] = [msgPort, current_milliseconds()]
+
 
 def scrub_fft(fft):
-	t = current_milliseconds()
-	for key in fft.keys():
-		if t - fft[key][1] >= 5000:
-			del fft[key]
+    t = current_milliseconds()
+    for key in fft.keys():
+        if t - fft[key][1] >= 5000:
+            del fft[key]
+
 
 if __name__ == "__main__":
-        LAN = sys.argv[2:]
-	bridge = Bridge(sys.argv[1])
-	ports = {}
-	openPorts = []
-	lastBPDU = 0
-	fft = {}
-        
-        # creates sockets and connects to them
-        for x in range(len(LAN)):
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
-                s.connect(pad(LAN[x]))
-		s.settimeout(1)
-                ports[x] = s
-		openPorts.append(x)
-        
-        print("Bridge " + bridge.id + " starting up\n")
- 
-        # Main loop
-        while True:
-		if current_milliseconds() - lastBPDU >= 500:
-			lastBPDU = current_milliseconds()
-			bpdu(bridge, ports)
-		scrub_fft(fft)
+    LAN = sys.argv[2:]
+    bridge = Bridge(sys.argv[1])
+    ports = {}
+    openPorts = []
+    lastBPDU = 0
+    fft = {}
 
-                # Reads from each fo the ready sockets
-                for key, value in ports:
-                        msg = read_message(x)
-			if msg:
-				source = msg['source']
-				destination = msg['destination']
-				type = msg['type']
-				message = msg['message']
-				
-				if type == 'bpdu':
-					treeData = handleBPDU(bridgeID, rootID,
-							      rootPort, cost,
-							      desBridge, key,
-							      message, ports)
-				elif type == 'data':
-					if key in openPorts:
-						update_fft(fft, source, key)
-					handle_data(source, destination,
-						    type, message, key,
-						    fft, openPorts, ports)
+    # creates sockets and connects to them
+    for x in range(len(LAN)):
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        s.connect(pad(LAN[x]))
+        s.settimeout(1)
+        ports[x] = s
+        openPorts.append(x)
+
+    print("Bridge " + bridge.id + " starting up\n")
+
+    # Main loop
+    while True:
+        if current_milliseconds() - lastBPDU >= 500:
+            lastBPDU = current_milliseconds()
+            bpdu(bridge, ports)
+        scrub_fft(fft)
+
+        # Reads from each fo the ready sockets
+        for key, value in ports:
+            msg = read_message(x)
+            if msg:
+                source = msg['source']
+                destination = msg['destination']
+                type = msg['type']
+                message = msg['message']
+
+                if type == 'bpdu':
+                    treeData = handleBPDU(bridgeID, rootID,
+                                          rootPort, cost,
+                                          desBridge, key,
+                                          message, ports)
+                elif type == 'data':
+                    if key in openPorts:
+                        update_fft(fft, source, key)
+                    handle_data(source, destination,
+                                type, message, key,
+                                fft, openPorts, ports)
