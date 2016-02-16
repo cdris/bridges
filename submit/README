@@ -1,0 +1,15 @@
+Our program is basically a loop that checks each of its ports for any incoming messages.
+If there is a message, it is delegated to a handler function based on its type (either
+'bpdu' or 'data'). We have a class for bridges with fields to hold onto the bridge id,
+root, root port, and cost to root. We also have a class for ports with fields to hold
+the actual socket, the most recent bpdu that has come in on that port, a boolean flag
+to say whether the port is open, and a timeout for the port's bpdu.
+
+We thoroughly tested our code against the provided test files as well as running our own
+unit tests on our functions. We used the run script far more than the test script, as it
+gave more helpful information for debugging.
+
+We found the logic for closing ports very challenging. We are still working on it, but
+our logic thusfar is sufficient to pass the first 6 simple test cases.
+
+- Ceridwen Driskill, Ty Coghlan

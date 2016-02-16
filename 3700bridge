@@ -1,5 +1,4 @@
 #!/usr/bin/python3 -u
-# The -u makes output unbuffered, so it will show up immediately
 import sys
 import socket
 import select
@@ -7,7 +6,8 @@ import json
 import time
 import random
 
-
+# represents a bridge which has an id, a root bridge, root port, cost to root, and a
+# designated bridge
 class Bridge:
     def __init__(self, id):
         self.id = id
@@ -16,19 +16,21 @@ class Bridge:
         self.cost = 0
         self.desBridge = id
 
+# represents a port which has a socket, most recent bpdu, open flag, and timeout
 class Port:
     def __init__(self, socket):
         self.port = socket
         self.bpdu = None # Source-id, root-id, cost
         self.flag = True
-        self.timeout = 0
-
+        self.timeout = current_milliseconds()
+    
+    # returns this port's socket's fileno
     def fileno(self):
         return self.port.fileno()
 
+# gets the current milliseconds
 def current_milliseconds():
     return int(round(time.time() * 1000))
-
 
 # pads the name with null bytes at the end
 def pad(name):
@@ -37,29 +39,31 @@ def pad(name):
         result += '\0'
     return result
 
-
+# sends a bpdu to all given ports
 def bpdu(bridge, ports):
     for key, value in ports.items():
         broadcast(bridge.id, 'ffff', 'bpdu',
                   {'id': key, 'root': bridge.root, 'cost': bridge.cost},
                   value.port)
 
-
+# sends a json message on the given port
 def broadcast(source, destination, type, message, port):
     port.send(json.JSONEncoder().encode({'source': source,
                                          'dest': destination,
                                          'type': type,
                                          'message': message}).encode())
 
-
+# reads from the given port and decodes the json
 def read_message(port):
     return json.JSONDecoder().decode(port.port.recv(1500).decode())
 
-
+# handles a bpdu
 def handle_bpdu(bridge, msgPort, message, ports):
     msgBridge = message['source']
     msgRoot = message['root']
     msgCost = message['cost'] + 1
+
+    # handles the case in which bridge info changes based on the new bpdu
     if (msgRoot < bridge.root) or \
             (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
                      ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
@@ -67,11 +71,13 @@ def handle_bpdu(bridge, msgPort, message, ports):
             print('New root: %s/%s' % (bridge.id, msgRoot))
         if bridge.rootPort != msgPort:
             print('Root port: %s/%d' % (bridge.id, msgPort))
+            ports[msgPort].flag = True
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
         bridge.desBridge = msgBridge
         bpdu(bridge, ports)
+    # decides how to close ports
     for key in ports.keys():
         port = ports[key]
         if (not port.bpdu is None) and (not (key == msgPort)) and port.flag:
@@ -86,18 +92,21 @@ def handle_bpdu(bridge, msgPort, message, ports):
                     ports[msgPort].flag = False
                     print('Disabled port: %s/%d' % (bridge.id, p))
             elif (port_bpdu['source'] == bridge.id and port_bpdu['id'] == msgPort) \
-                  or (port_bpdu['source'] == msgBridge and msgBridge < bridge.id):
+                  or (port_bpdu['source'] == msgBridge and msgBridge < bridge.id) \
+                  or (msgCost - 1 <= bridge.cost and msgPort != bridge.rootPort \
+                      and msgBridge < bridge.id):
                 ports[msgPort].flag = False
                 print('Disabled port: %s/%d' % (bridge.id, msgPort))
 
+# handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
     msgID = message['id']
     print('Received message %d on port %d from %s to %s' % (msgID, msgPort, source, destination))
-    try:
+    try:  # ensures that the destination is in the fft, otherwise broadcasts everywhere
         portInfo = fft[destination]
-        if portInfo[0] == msgPort:
+        if portInfo[0] == msgPort:  # message is not sent if it would go out on the same port
             print('Not forwarding message %d' % msgID)
-        elif ports[portInfo[0]].flag:
+        elif ports[portInfo[0]].flag: # makes sure the destination port is open
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
             broadcast(source, destination, type, message, ports[portInfo[0]].port)
         else:
@@ -111,11 +120,11 @@ def handle_data(source, destination, type, message, msgPort, fft, ports):
             if key != msgPort and ports[key].flag:
                 broadcast(source, destination, type, message, ports[key].port)
 
-
+# updates the given fft with new source information
 def update_fft(fft, source, msgPort):
     fft[source] = [msgPort, current_milliseconds()]
 
-
+# returns a new fft which only includes the entries from the given fft that have not timed out
 def scrub_fft(fft):
     t = current_milliseconds()
     newFFT = {}
@@ -124,11 +133,23 @@ def scrub_fft(fft):
             newFFT[key] = value
     return newFFT
 
+# reopens any ports whose most recent bpdus have timed out
+def scrub_ports(ports):
+    for port in ports.values():
+        if current_milliseconds() - port.timeout > 750:
+            port.flag = True
+            port.bpdu = None
+
+# main
 if __name__ == "__main__":
     LAN = sys.argv[2:]
+    # our bridge object, holds onto id, root, root port, etc
     bridge = Bridge(sys.argv[1])
+    # dictionary with each key being the port number, each value is a port object
     ports = {}
+    # timestamp in milliseconds of the last bpdu received
     lastBPDU = 0
+    # dictionary with each key being the destination, each value is list of port number, timestamp
     fft = {}
 
     # creates sockets and connects to them
@@ -141,30 +162,40 @@ if __name__ == "__main__":
 
     # Main loop
     while True:
+        # sends out a new bpdu if 500ms have passed since the last one was sent
         if current_milliseconds() - lastBPDU >= 500:
             lastBPDU = current_milliseconds()
             bpdu(bridge, ports)
+        # scrubs out old entries from the fft
         fft = scrub_fft(fft)
+        scrub_ports(ports)
 
         ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
 
-        # Reads from each of the ready sockets
+        # Reads from each of the ports
         for key in ports.keys():
             port = ports[key]
+            # only reads from a port if it's ready
             if port in ready:
                 msg = read_message(port)
+                # ensures there were no issues reading the message
                 if msg:
                     source = msg['source']
                     destination = msg['dest']
                     type = msg['type']
                     message = msg['message']
-
+                    # handles a bpdu message
                     if type == 'bpdu':
                         message['source'] = source
-                        port.bpdu = message
+                        # changes the port's most recent bpdu to the new message
                         handle_bpdu(bridge, key, message, ports)
+                        port.bpdu = message
+                        port.timeout = current_milliseconds()
+                    # handles a data message
                     elif type == 'data':
+                        # only acts on the data message if the port it came in on is open
                         if port.flag:
+                            # updates the fft with the new source info
                             update_fft(fft, source, key)
                             handle_data(source, destination,
                                         type, message, key,
