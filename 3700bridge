@@ -65,38 +65,28 @@ def handle_bpdu(bridge, msgPort, message, ports):
 
     # handles the case in which bridge info changes based on the new bpdu
     if (msgRoot < bridge.root) or \
-            (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
-                     ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
+       (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
+       ((msgCost < bridge.cost) or (msgBridge < bridge.desBridge))):
         if bridge.root != msgRoot:
             print('New root: %s/%s' % (bridge.id, msgRoot))
         if bridge.rootPort != msgPort:
             print('Root port: %s/%d' % (bridge.id, msgPort))
             ports[msgPort].flag = True
+            print('port %d reopened due to bpdu' % (msgPort))
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
         bridge.desBridge = msgBridge
         bpdu(bridge, ports)
     # decides how to close ports
-    for key in ports.keys():
-        port = ports[key]
-        if (not port.bpdu is None) and (not (key == msgPort)) and port.flag:
-            port_bpdu = port.bpdu
-            if ['root'] == msgRoot and port_bpdu['cost'] == msgCost - 1 and \
-                port_bpdu['source'] != msgBridge:
-                p = key
-                if port_bpdu['source'] >= msgBridge:
-                    port.flag = False
-                else:
-                    p = msgPort
-                    ports[msgPort].flag = False
-                    print('Disabled port: %s/%d' % (bridge.id, p))
-            elif (port_bpdu['source'] == bridge.id and port_bpdu['id'] == msgPort) \
-                  or (port_bpdu['source'] == msgBridge and msgBridge < bridge.id) \
-                  or (msgCost - 1 <= bridge.cost and msgPort != bridge.rootPort \
-                      and msgBridge < bridge.id):
-                ports[msgPort].flag = False
-                print('Disabled port: %s/%d' % (bridge.id, msgPort))
+    msgCost -= 1
+    if (msgCost == bridge.cost or (bridge.id == msgBridge and ports[message['id']].flag) \
+       and msgPort != bridge.rootPort:
+        ports[msgPort].flag = False
+        print('Disabled port: %s/%d' % (bridge.id, msgPort))
+    if msgCost != bridge.cost:
+       
+        
 
 # handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
@@ -106,14 +96,15 @@ def handle_data(source, destination, type, message, msgPort, fft, ports):
         portInfo = fft[destination]
         if portInfo[0] == msgPort:  # message is not sent if it would go out on the same port
             print('Not forwarding message %d' % msgID)
+            print(fft)
         elif ports[portInfo[0]].flag: # makes sure the destination port is open
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
             broadcast(source, destination, type, message, ports[portInfo[0]].port)
         else:
             print('Broadcasting message %d to all ports' % msgID)
-            for port in openPorts:
-                if port != msgPort:
-                    broadcast(source, destination, type, message, ports[port].port)
+            for key, value in ports.items():
+                if key != msgPort and value.flag:
+                    broadcast(source, destination, type, message, value.port)
     except KeyError:
         print('Broadcasting message %d to all ports' % msgID)
         for key in ports.keys():
@@ -135,10 +126,11 @@ def scrub_fft(fft):
 
 # reopens any ports whose most recent bpdus have timed out
 def scrub_ports(ports):
-    for port in ports.values():
-        if current_milliseconds() - port.timeout > 750:
+    for key, port in ports.items():
+        if current_milliseconds() - port.timeout > 750 and port.bpdu != None and not port.flag:
             port.flag = True
             port.bpdu = None
+            print('port %d reopened due to timeout' % (key))
 
 # main
 if __name__ == "__main__":
@@ -164,17 +156,16 @@ if __name__ == "__main__":
     while True:
         # sends out a new bpdu if 500ms have passed since the last one was sent
         if current_milliseconds() - lastBPDU >= 500:
-            lastBPDU = current_milliseconds()
             bpdu(bridge, ports)
+            lastBPDU = current_milliseconds()
         # scrubs out old entries from the fft
         fft = scrub_fft(fft)
         scrub_ports(ports)
 
-        ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.5)
+        ready, ignore, ignore2 = select.select(ports.values(), [], [], 0.25)
 
         # Reads from each of the ports
-        for key in ports.keys():
-            port = ports[key]
+        for key, port in ports.items():
             # only reads from a port if it's ready
             if port in ready:
                 msg = read_message(port)
