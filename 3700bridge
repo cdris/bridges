@@ -43,7 +43,8 @@ def pad(name):
 def bpdu(bridge, ports):
     for key, value in ports.items():
         broadcast(bridge.id, 'ffff', 'bpdu',
-                  {'id': key, 'root': bridge.root, 'cost': bridge.cost},
+                  {'portkey': key, 'designated': bridge.desBridge,
+                   'root': bridge.root, 'cost': bridge.cost},
                   value.port)
 
 # sends a json message on the given port
@@ -80,13 +81,17 @@ def handle_bpdu(bridge, msgPort, message, ports):
         bpdu(bridge, ports)
     # decides how to close ports
     msgCost -= 1
-    if (msgCost == bridge.cost or (bridge.id == msgBridge and ports[message['id']].flag) \
-       and msgPort != bridge.rootPort:
+    if ((msgCost == bridge.cost and bridge.id > msgBridge and msgRoot == bridge.root) \
+        or (bridge.id == msgBridge and ports[message['portkey']].flag) \
+        or (bridge.desBridge == msgBridge and msgBridge != bridge.id \
+            and msgPort != bridge.rootPort) \
+        or (msgCost < bridge.cost and msgBridge != bridge.desBridge)) \
+        and msgPort != bridge.rootPort:
         ports[msgPort].flag = False
         print('Disabled port: %s/%d' % (bridge.id, msgPort))
-    if msgCost != bridge.cost:
-       
-        
+#    if msgCost > bridge.cost and message['designated'] == bridge.id:
+#        ports[msgPort].flag = True
+#        print('Reopened port: %s/%d' % (bridge.id, msgPort)) 
 
 # handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
