@@ -102,13 +102,13 @@ def handle_bpdu(bridge, msgPort, message, ports):
         and not ports[msgPort].flag:
         ports[msgPort].flag = True
         ports[msgPort].open = (1, now)
-        print('Reopened port: %s/%d' % (bridge.id, msgPort))
+        print('Reopened port: %s/%d due to designated' % (bridge.id, msgPort))
     if msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot \
-        and not ports[msgPort].flag and ports[msgPort].close[0] < 0 and \
+        and (not ports[msgPort].flag) and ports[msgPort].close[0] < 0 and \
         ports[msgPort].open[0] < 1:
         ports[msgPort].flag = True
         ports[msgPort].open = (0, now)
-        print('Reopened port: %s/%d' % (bridge.id, msgPort))
+        print('Reopened port: %s/%d due to cost' % (bridge.id, msgPort))
  
 
 # handles a data message
@@ -118,7 +118,7 @@ def handle_data(source, destination, type, message, msgPort, fft, ports):
     try:  # ensures that the destination is in the fft, otherwise broadcasts everywhere
         portInfo = fft[destination]
         if portInfo[0] == msgPort:  # message is not sent if it would go out on the same port
-            print('Not forwarding message %d' % msgID)
+            print('Not forwarding message %d, source/port = %s/%d' % (msgID, source, msgPort))
         elif ports[portInfo[0]].flag: # makes sure the destination port is open
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
             broadcast(source, destination, type, message, ports[portInfo[0]].port)
@@ -142,7 +142,7 @@ def scrub_fft(fft):
     t = current_milliseconds()
     newFFT = {}
     for key, value in fft.items():
-        if t - fft[key][1] < 5000:
+        if t - value[1] < 5000:
             newFFT[key] = value
     return newFFT
 
@@ -156,9 +156,11 @@ def scrub_ports(ports):
             port.bpdu = None
             print('port %d reopened due to timeout' % (key))
         if now - port.open[1] > 750:
+            print('port %d refreshed its open ports' % (key))
             port.open = (-1, now)
-        if now - port.close[1] > 750:
-            port.close = (-1, now)
+     #   if now - port.close[1] > 750:
+     #       print('port %d refreshed its closed ports' % (key))
+     #       port.close = (-1, now)
 
 # main
 if __name__ == "__main__":
