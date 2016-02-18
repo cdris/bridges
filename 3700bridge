@@ -19,11 +19,14 @@ class Bridge:
 # represents a port which has a socket, most recent bpdu, open flag, and timeout
 class Port:
     def __init__(self, socket):
+        now = current_milliseconds()
         self.port = socket
         self.bpdu = None # Source-id, root-id, cost
         self.flag = True
         self.alive = True
-        self.timeout = current_milliseconds()
+        self.open = (-1, now)
+        self.close = (-1, now)
+        self.timeout = now
     
     # returns this port's socket's fileno
     def fileno(self):
@@ -43,7 +46,7 @@ def pad(name):
 # sends a bpdu to all given ports
 def bpdu(bridge, ports):
     for key, value in ports.items():
-        broadcast(bridge.id, 'ffff', 'bpdu',
+        broadcast(bridge.id, "ffff", 'bpdu',
                   {'portkey': key, 'designated': bridge.desBridge,
                    'root': bridge.root, 'cost': bridge.cost},
                   value.port)
@@ -82,6 +85,7 @@ def handle_bpdu(bridge, msgPort, message, ports):
         bpdu(bridge, ports)
     # decides how to close ports
     msgCost -= 1
+    now = current_milliseconds()
     if bridge.id == msgBridge and ports[message['portkey']].flag:
         ports[msgPort].flag = False
         ports[msgPort].alive = False
@@ -90,14 +94,22 @@ def handle_bpdu(bridge, msgPort, message, ports):
         or (bridge.desBridge == msgBridge and msgBridge != bridge.id \
             and msgPort != bridge.rootPort) \
         or (msgCost < bridge.cost and msgBridge != bridge.desBridge)) \
-        and msgPort != bridge.rootPort and ports[msgPort].flag:
+        and msgPort != bridge.rootPort and ports[msgPort].flag and ports[msgPort].open[0] < 1:
         ports[msgPort].flag = False
+        ports[msgPort].close = (0, now)
         print('Disabled port: %s/%d' % (bridge.id, msgPort))
-    if ((msgCost > bridge.cost and message['designated'] == bridge.id) \
-        or (msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot)) \
+    if (msgCost > bridge.cost and message['designated'] == bridge.id) \
         and not ports[msgPort].flag:
         ports[msgPort].flag = True
-        print('Reopened port: %s/%d' % (bridge.id, msgPort)) 
+        ports[msgPort].open = (1, now)
+        print('Reopened port: %s/%d' % (bridge.id, msgPort))
+    if msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot \
+        and not ports[msgPort].flag and ports[msgPort].close[0] < 0 and \
+        ports[msgPort].open[0] < 1:
+        ports[msgPort].flag = True
+        ports[msgPort].open = (0, now)
+        print('Reopened port: %s/%d' % (bridge.id, msgPort))
+ 
 
 # handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
@@ -137,11 +149,16 @@ def scrub_fft(fft):
 # reopens any ports whose most recent bpdus have timed out
 def scrub_ports(ports):
     for key, port in ports.items():
-        if current_milliseconds() - port.timeout > 750 and port.bpdu != None \
+        now = current_milliseconds()
+        if now - port.timeout > 750 and port.bpdu != None \
            and not port.flag and port.alive:
             port.flag = True
             port.bpdu = None
             print('port %d reopened due to timeout' % (key))
+        if now - port.open[1] > 750:
+            port.open = (-1, now)
+        if now - port.close[1] > 750:
+            port.close = (-1, now)
 
 # main
 if __name__ == "__main__":
