@@ -107,18 +107,18 @@ def handle_data(source, destination, type, message, msgPort, fft, ports):
         portInfo = fft[destination]
         if portInfo[0] == msgPort:  # message is not sent if it would go out on the same port
             print('Not forwarding message %d' % msgID)
-        elif ports[portInfo[0]].flag: # makes sure the destination port is open
+        elif ports[portInfo[0]].flag and ports[portInfo[0]].alive: # makes sure the destination port is open
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
             broadcast(source, destination, type, message, ports[portInfo[0]].port)
         else:
             print('Broadcasting message %d to all ports' % msgID)
             for key, value in ports.items():
-                if key != msgPort and value.flag:
+                if key != msgPort and value.flag and value.alive:
                     broadcast(source, destination, type, message, value.port)
     except KeyError:
         print('Broadcasting message %d to all ports' % msgID)
         for key in ports.keys():
-            if key != msgPort and ports[key].flag:
+            if key != msgPort and ports[key].flag and ports[key].alive:
                 broadcast(source, destination, type, message, ports[key].port)
 
 # updates the given fft with new source information
