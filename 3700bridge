@@ -19,15 +19,16 @@ class Bridge:
 # represents a port which has a socket, most recent bpdu, open flag, and timeout
 class Port:
     def __init__(self, socket):
-        now = current_milliseconds()
         self.port = socket
-        self.bpdu = None # Source-id, root-id, cost
-        self.flag = True
+        self.bpdus = {} # Source-id: command, timeout, message
         self.alive = True
-        self.open = (-1, now)
-        self.close = (-1, now)
-        self.timeout = now
     
+    def status(self):
+        temp = 0
+        for bpdu in self.bpdus.values():
+            temp = max(bpdu[0], temp)
+        return temp != 1 and self.alive
+
     # returns this port's socket's fileno
     def fileno(self):
         return self.port.fileno()
@@ -68,6 +69,9 @@ def handle_bpdu(bridge, msgPort, message, ports):
     msgRoot = message['root']
     msgCost = message['cost'] + 1
 
+    print('Port : %s/%d has status %d' % (bridge.id, msgPort, ports[msgPort].status()))
+    command = 0
+
     # handles the case in which bridge info changes based on the new bpdu
     if (msgRoot < bridge.root) or \
        (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
@@ -76,40 +80,40 @@ def handle_bpdu(bridge, msgPort, message, ports):
             print('New root: %s/%s' % (bridge.id, msgRoot))
         if bridge.rootPort != msgPort:
             print('Root port: %s/%d' % (bridge.id, msgPort))
-            ports[msgPort].flag = True
+            if msgPort in ports[msgPort].bpdus:
+                ports[msgPort].bpdus[msgPort][0] = 2
             print('port %d reopened due to bpdu' % (msgPort))
         bridge.root = msgRoot
         bridge.rootPort = msgPort
         bridge.cost = msgCost
         bridge.desBridge = msgBridge
         bpdu(bridge, ports)
+        return 2
     # decides how to close ports
     msgCost -= 1
-    now = current_milliseconds()
-    if bridge.id == msgBridge and ports[message['portkey']].flag:
-        ports[msgPort].flag = False
+    if msgBridge in ports[msgPort].bpdus and ports[msgPort].bpdus[msgBridge][2] == message:
+        return ports[msgPort].bpdus[msgBridge][0]
+    if bridge.id == msgBridge and ports[message['portkey']].status() != 1:
         ports[msgPort].alive = False
         print('Killed port %s/%d' % (bridge.id, msgPort))
+        return -1
+    if msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot:
+        command = 0
+        print('Reopened port: %s/%d due to cost' % (bridge.id, msgPort))
     if ((msgCost == bridge.cost and bridge.id > msgBridge and msgRoot == bridge.root) \
         or (bridge.desBridge == msgBridge and msgBridge != bridge.id \
             and msgPort != bridge.rootPort) \
         or (msgCost < bridge.cost and msgBridge != bridge.desBridge)) \
-        and msgPort != bridge.rootPort and ports[msgPort].flag and ports[msgPort].open[0] < 1:
-        ports[msgPort].flag = False
-        ports[msgPort].close = (0, now)
-        print('Disabled port: %s/%d' % (bridge.id, msgPort))
-    if (msgCost > bridge.cost and message['designated'] == bridge.id) \
-        and not ports[msgPort].flag:
-        ports[msgPort].flag = True
-        ports[msgPort].open = (1, now)
+        and msgPort != bridge.rootPort and ports[msgPort].status() != 1:
+        if ports[msgPort].status() < 2:
+            print('Disabled port: %s/%d' % (bridge.id, msgPort))
+            command = 1
+    if message['designated'] == bridge.id:
+        command = 2
         print('Reopened port: %s/%d due to designated' % (bridge.id, msgPort))
-    if msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot \
-        and (not ports[msgPort].flag) and ports[msgPort].close[0] < 0 and \
-        ports[msgPort].open[0] < 1:
-        ports[msgPort].flag = True
-        ports[msgPort].open = (0, now)
-        print('Reopened port: %s/%d due to cost' % (bridge.id, msgPort))
- 
+    if msgBridge in ports[msgPort].bpdus and ports[msgPort].bpdus[msgBridge][2] == message:
+        command = ports[msgPort].bpdus[msgBridge][0]
+    return command
 
 # handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
@@ -119,18 +123,19 @@ def handle_data(source, destination, type, message, msgPort, fft, ports):
         portInfo = fft[destination]
         if portInfo[0] == msgPort:  # message is not sent if it would go out on the same port
             print('Not forwarding message %d, source/port = %s/%d' % (msgID, source, msgPort))
-        elif ports[portInfo[0]].flag: # makes sure the destination port is open
+        elif ports[portInfo[0]].status() != 1 and ports[portInfo[0]].alive:
+        # makes sure the destination port is open
             print('Forwarding message %d to port %d' % (msgID, portInfo[0]))
             broadcast(source, destination, type, message, ports[portInfo[0]].port)
         else:
             print('Broadcasting message %d to all ports' % msgID)
             for key, value in ports.items():
-                if key != msgPort and value.flag:
+                if key != msgPort and value.status() != 1 and value.alive:
                     broadcast(source, destination, type, message, value.port)
     except KeyError:
         print('Broadcasting message %d to all ports' % msgID)
         for key in ports.keys():
-            if key != msgPort and ports[key].flag:
+            if key != msgPort and ports[key].status() != 1 and ports[key].alive:
                 broadcast(source, destination, type, message, ports[key].port)
 
 # updates the given fft with new source information
@@ -139,28 +144,22 @@ def update_fft(fft, source, msgPort):
 
 # returns a new fft which only includes the entries from the given fft that have not timed out
 def scrub_fft(fft):
-    t = current_milliseconds()
     newFFT = {}
     for key, value in fft.items():
-        if t - value[1] < 5000:
+        if current_milliseconds() - value[1] < 5000:
             newFFT[key] = value
     return newFFT
 
 # reopens any ports whose most recent bpdus have timed out
 def scrub_ports(ports):
     for key, port in ports.items():
-        now = current_milliseconds()
-        if now - port.timeout > 750 and port.bpdu != None \
-           and not port.flag and port.alive:
-            port.flag = True
-            port.bpdu = None
-            print('port %d reopened due to timeout' % (key))
-        if now - port.open[1] > 750:
-            print('port %d refreshed its open ports' % (key))
-            port.open = (-1, now)
-     #   if now - port.close[1] > 750:
-     #       print('port %d refreshed its closed ports' % (key))
-     #       port.close = (-1, now)
+        newBPDUS = {}
+        for source, bpdu in port.bpdus.items():
+            if current_milliseconds() - bpdu[1] <= 750:
+                newBPDUS[source] = bpdu
+            else:
+                print('Reopened %d due to timeout'% (key))
+        port.bpdus = newBPDUS
 
 # main
 if __name__ == "__main__":
@@ -209,13 +208,16 @@ if __name__ == "__main__":
                     if type == 'bpdu':
                         message['source'] = source
                         # changes the port's most recent bpdu to the new message
-                        handle_bpdu(bridge, key, message, ports)
-                        port.bpdu = message
-                        port.timeout = current_milliseconds()
-                    # handles a data message
+                        command = handle_bpdu(bridge, key, message, ports)
+                        if command == -1 or not port.alive:
+                            port.bpdus = {}
+                        else:
+                            port.bpdus[key] = [command, current_milliseconds(), message]
+                        print('Port : %s/%d has status %d' % (bridge.id, key, port.status()))
+                   # handles a data message
                     elif type == 'data':
                         # only acts on the data message if the port it came in on is open
-                        if port.flag:
+                        if port.status() != 1:
                             # updates the fft with the new source info
                             update_fft(fft, source, key)
                             handle_data(source, destination,
