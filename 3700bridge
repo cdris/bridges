@@ -15,6 +15,7 @@ class Bridge:
         self.rootPort = -1
         self.cost = 0
         self.desBridge = id
+        self.bpdus = {}
 
 # represents a port which has a socket, most recent bpdu, open flag, and timeout
 class Port:
@@ -68,10 +69,6 @@ def handle_bpdu(bridge, msgPort, message, ports):
     msgBridge = message['source']
     msgRoot = message['root']
     msgCost = message['cost'] + 1
-
-    print('Port : %s/%d has status %d' % (bridge.id, msgPort, ports[msgPort].status()))
-    command = 0
-
     # handles the case in which bridge info changes based on the new bpdu
     if (msgRoot < bridge.root) or \
        (not ((msgRoot > bridge.root) or (msgCost > bridge.cost)) and \
@@ -88,32 +85,8 @@ def handle_bpdu(bridge, msgPort, message, ports):
         bridge.cost = msgCost
         bridge.desBridge = msgBridge
         bpdu(bridge, ports)
-        return 2
     # decides how to close ports
-    msgCost -= 1
-    if msgBridge in ports[msgPort].bpdus and ports[msgPort].bpdus[msgBridge][2] == message:
-        return ports[msgPort].bpdus[msgBridge][0]
-    if bridge.id == msgBridge and ports[message['portkey']].status() != 1:
-        ports[msgPort].alive = False
-        print('Killed port %s/%d' % (bridge.id, msgPort))
-        return -1
-    if msgCost == bridge.cost and bridge.id < msgBridge and bridge.root == msgRoot:
-        command = 0
-        print('Reopened port: %s/%d due to cost' % (bridge.id, msgPort))
-    if ((msgCost == bridge.cost and bridge.id > msgBridge and msgRoot == bridge.root) \
-        or (bridge.desBridge == msgBridge and msgBridge != bridge.id \
-            and msgPort != bridge.rootPort) \
-        or (msgCost < bridge.cost and msgBridge != bridge.desBridge)) \
-        and msgPort != bridge.rootPort and ports[msgPort].status() != 1:
-        if ports[msgPort].status() < 2:
-            print('Disabled port: %s/%d' % (bridge.id, msgPort))
-            command = 1
-    if message['designated'] == bridge.id:
-        command = 2
-        print('Reopened port: %s/%d due to designated' % (bridge.id, msgPort))
-    if msgBridge in ports[msgPort].bpdus and ports[msgPort].bpdus[msgBridge][2] == message:
-        command = ports[msgPort].bpdus[msgBridge][0]
-    return command
+
 
 # handles a data message
 def handle_data(source, destination, type, message, msgPort, fft, ports):
